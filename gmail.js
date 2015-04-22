@@ -2063,6 +2063,21 @@ var Gmail = function(localJQuery) {
       return subject ? subject : this.dom('subject').val();
     },
 
+    from: function() {
+      var fromLabels = this.$el.find('.GS label')
+                    .filter(function(index, element) {
+                      return $(element).text() === 'From';
+                    });
+      if (fromLabels.length) {
+        fromId = this.$el.find(fromLabels[0]).attr("for");
+        jquerySearchString = "#" + fromId.replace(":", "\\:");
+        fromEmail = this.$el.find(jquerySearchString).text();
+        return fromEmail;
+      }
+      else {
+        return null;
+      }
+    },
     /**
       Get/Set the email body
      */
@@ -2091,7 +2106,7 @@ var Gmail = function(localJQuery) {
         all_subjects: 'input[name=subjectbox], input[name=subject]',
         body: 'div[contenteditable=true]',
         reply: 'M9',
-        forward: 'M9',
+        forward: 'M9'
       };
       if(!config[lookup]) api.tools.error('Dom lookup failed. Unable to find config for \'' + lookup + '\'',config,lookup,config[lookup]);
       return this.$el.find(config[lookup]);
