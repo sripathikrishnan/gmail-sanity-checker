@@ -3,7 +3,7 @@ var gmail;
 //TODO : Populate this using an AJAX call so that we don't have to reinstall the plugin
 var allKickdrumCustomerDomains = ["kickdrum.com", "kickdrumtech.com", 
                                     "sharestream.com", "atlassian.com",
-                                    "examsoft.com", "idera.com"];
+                                    "examsoft.com", "idera.com", "copperegg.com"];
 
 function refresh(f) {
   if( (/in/.test(document.readyState)) || (undefined === Gmail) ) {
@@ -40,6 +40,26 @@ function onRecipientChange(compose) {
     }
 }
 
+function onSendMail(url, body, data, xhr) {
+    var recipients = [];
+    if (data['to']) {
+        recipients = recipients.concat(data['to']);
+    }
+    if (data['cc']) {
+        recipients = recipients.concat(data['cc']);
+    }
+    if (data['bcc']) {
+        recipients = recipients.concat(data['bcc']);
+    }
+
+    var from = data['from'];
+    var sendingMailFromKickdrum = fromEmail.indexOf("kickdrumtech.com") > 1;
+
+    if (isKickdrumCustomer(recipients) && !sendingMailFromKickdrum) {
+        alert("WARNING - You are sending an email to a Kickdrum Customer from a non-Kickdrum email account. Dismiss this alert and undo sending email");
+    }
+}
+
 function alertRowExists(composeId, composeDiv) {
     if(composeDiv.find("#" + composeId).length) {
         return true;
@@ -68,6 +88,8 @@ function hideAlert(composeId, composeDiv) {
 }
 
 function isKickdrumCustomer(recipients) {
+    //Eliminate empty recipients
+    recipients = recipients.filter(function(e){return e});
     var domains = extractDomains(recipients);
     var customerDomains = $(domains).filter(allKickdrumCustomerDomains);
     return customerDomains.length > 0 ? true  : false;
@@ -89,6 +111,8 @@ function extractDomains(recipients) {
 var main = function(){
   gmail = new Gmail();
   gmail.observe.on("recipient_change", onRecipientChange);
+  gmail.observe.on("compose", onRecipientChange);
+  gmail.observe.before("send_message", onSendMail);
 }
 
 
