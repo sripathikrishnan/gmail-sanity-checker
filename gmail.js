@@ -270,7 +270,8 @@ var Gmail = function(localJQuery) {
         for(var i=0; i<items.length; i++) {
           var mail_id = items[i].getAttribute('class').split(' ')[2];
           var is_editable = items[i].getAttribute('contenteditable');
-          if(mail_id != 'undefined' && mail_id != undefined) {
+          var is_visible = items[i].offsetWidth > 0 && items[i].offsetHeight > 0;
+          if(mail_id != 'undefined' && mail_id != undefined && is_visible) {
             if(is_editable != 'true') {
               text.push(mail_id);
             }
@@ -595,10 +596,6 @@ var Gmail = function(localJQuery) {
       return params.body_is_object && api.observe.bound('upload_attachment') ? { upload_attachment: [ params.body_params ] } : false; // trigger attachment event
     }
 
-    if(params.method == 'POST' && typeof params.url.act == 'string') {
-      // console.log(params.url, params.body);
-    }
-
     if(params.url.search != undefined) {
       // console.log(params.url, params.body, params.url_raw);
     }
@@ -743,9 +740,17 @@ var Gmail = function(localJQuery) {
         triggered.refresh = response;
       }
     }
+
     if(response && action_map[action] && api.observe.bound(action_map[action])) {
       triggered[action_map[action]] = response;
     }
+
+    if(params.method == 'POST' && (typeof params.url.SID == 'string'
+                                   || typeof params.url.ik == 'string'
+                                   || typeof params.url.act == 'string')) {
+      triggered.http_event = [params]; // send every event and all data
+    }
+
     return triggered;
   }
 
@@ -1555,6 +1560,19 @@ var Gmail = function(localJQuery) {
     }, 0);
   }
 
+  api.tools.get_reply_to = function(ms13) {
+    // reply to is an array if exists
+    var reply_to = (ms13 != undefined) ? ms13[4] : [];
+
+    // if reply to set get email from it and return it
+    if (reply_to.length !== 0) {
+      return api.tools.extract_email_address(reply_to[0]);
+    }
+
+    // otherwise return null
+    return null;
+  }
+
   api.tools.parse_email_data = function(email_data) {
     var data = {};
     var threads = {}
@@ -1589,6 +1607,7 @@ var Gmail = function(localJQuery) {
         data.threads[x[1]].to = (x[13] != undefined) ? x[13][1] : ((x[37] != undefined) ? x[37][1]:[]);
         data.threads[x[1]].cc = (x[13] != undefined) ? x[13][2] : [];
         data.threads[x[1]].bcc = (x[13] != undefined) ? x[13][3] : [];
+        data.threads[x[1]].reply_to = api.tools.get_reply_to(x[13]);
 
         try { // jQuery will sometime fail to parse x[13][6], if so, putting the raw HTML
           data.threads[x[1]].content_plain = (x[13] != undefined) ? $(x[13][6]).text() : x[8];
@@ -1784,7 +1803,7 @@ var Gmail = function(localJQuery) {
     return dictionary[label];
   }
 
-  api.tools.add_toolbar_button = function(content, onClickFunction,styleClass) {
+  api.tools.add_toolbar_button = function(content_html, onClickFunction, styleClass) {
     var container = $(document.createElement('div'));
     container.attr('class','G-Ni J-J5-Ji');
 
@@ -1799,7 +1818,7 @@ var Gmail = function(localJQuery) {
     }
     button.attr('class', buttonClasses);
 
-    button.html(content);
+    button.html(content_html);
     button.click(onClickFunction);
 
     var content = $(document.createElement('div'));
@@ -1812,17 +1831,108 @@ var Gmail = function(localJQuery) {
     return container;
   }
 
-  api.tools.add_compose_button =  function(composeWindow, content, onClickFunction, styleClass) {
+  api.tools.add_compose_button =  function(composeWindow, content_html, onClickFunction, styleClass) {
     var button = $(document.createElement('div'));
     var buttonClasses = 'T-I J-J5-Ji aoO L3 ';
     if(styleClass != undefined){
       buttonClasses += styleClass;
     }
     button.attr('class', buttonClasses);
-    button.html(content);
+    button.html(content_html);
     button.click(onClickFunction);
 
     composeWindow.find('.gU.Up  > .J-J5-Ji').append(button);
+  }
+  
+  api.tools.add_modal_window = function(title, content_html, onClickOk, onClickCancel, onClickClose) {
+    var remove = function() {
+      $('#gmailJsModalBackground').remove();
+      $('#gmailJsModalWindow').remove();
+    };
+    
+    // By default, clicking on cancel or close should clean up the modal window
+    onClickClose = onClickClose || remove;
+    onClickCancel = onClickCancel || remove;
+    
+    var background = $(document.createElement('div'));
+    background.attr('id','gmailJsModalBackground');
+    background.attr('class','Kj-JD-Jh');
+    background.attr('aria-hidden','true');
+    background.attr('style','opacity:0.75;width:100%;height:100%;');
+    
+    // Modal window wrapper
+    var container = $(document.createElement('div'));
+    container.attr('id','gmailJsModalWindow');
+    container.attr('class', 'Kj-JD');
+    container.attr('tabindex', '0');
+    container.attr('role', 'alertdialog');
+    container.attr('aria-labelledby', 'gmailJsModalWindowTitle');
+    container.attr('style', 'left:50%;top:50%;opacity:1;');
+    
+    // Modal window header contents
+    var header = $(document.createElement('div'));
+    header.attr('class', 'Kj-JD-K7 Kj-JD-K7-GIHV4');
+    
+    var heading = $(document.createElement('span'));
+    heading.attr('id', 'gmailJsModalWindowTitle');
+    heading.attr('class', 'Kj-JD-K7-K0');
+    heading.attr('role', 'heading');
+    heading.html(title);
+    
+    var closeButton = $(document.createElement('span'));
+    closeButton.attr('id', 'gmailJsModalWindowClose');
+    closeButton.attr('class', 'Kj-JD-K7-Jq');
+    closeButton.attr('role', 'button');
+    closeButton.attr('tabindex', '0');
+    closeButton.attr('aria-label', 'Close');
+    closeButton.click(onClickClose);
+    
+    header.append(heading);
+    header.append(closeButton);
+    
+    // Modal window contents
+    var contents = $(document.createElement('div'));
+    contents.attr('id', 'gmailJsModalWindowContent');
+    contents.attr('class', 'Kj-JD-Jz');
+    contents.html(content_html);
+    
+    // Modal window controls
+    var controls = $(document.createElement('div'));
+    controls.attr('class', 'Kj-JD-Jl');
+    
+    var okButton = $(document.createElement('button'));
+    okButton.attr('id', 'gmailJsModalWindowOk');
+    okButton.attr('class', 'J-at1-auR J-at1-atl');
+    okButton.attr('name', 'ok');
+    okButton.text('OK');
+    okButton.click(onClickOk);
+    
+    var cancelButton = $(document.createElement('button'));
+    cancelButton.attr('id', 'gmailJsModalWindowCancel');
+    cancelButton.attr('name', 'cancel');
+    cancelButton.text('Cancel');
+    cancelButton.click(onClickCancel);
+    
+    controls.append(okButton);
+    controls.append(cancelButton);
+    
+    container.append(header);
+    container.append(contents);
+    container.append(controls);
+    
+    $(document.body).append(background);
+    $(document.body).append(container);
+    
+    var center = function() {
+      container.css({
+        top: ($(window).height() - container.outerHeight()) / 2,
+        left: ($(window).width() - container.outerWidth()) / 2
+      });
+    };
+    
+    center();
+    
+    $(window).resize(center);
   }
 
   api.chat.is_hangouts = function() {
